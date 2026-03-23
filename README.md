@@ -2,7 +2,7 @@
 
 This is a fresh MuJoCo project for a tiny tank-like car with:
 - a custom `xacro`/URDF model,
-- a MuJoCo scene with random target + obstacles sized relative to the car,
+- a MuJoCo scene with a compact 2m x 2m room and minimal wall obstacles,
 - an MJX-backed RL environment using 4 front distance sensors plus explicit target-direction cues,
 - a PPO-style training loop that runs time-budgeted CPU training episodes.
 
@@ -32,14 +32,18 @@ No center ray is used. The policy input uses:
 - a short temporal stack of these same 4 readings (3 frames), and
 - target guidance features (`distance_to_target`, `cos(heading_error)`, `sin(heading_error)`).
 
+Policy action has 2 outputs: left-track speed command and right-track speed command (both normalized in `[-1, 1]`).
+Each action is held for about `0.48s` (`frame_skip=4`, `action_hold_steps=6`) before the next network decision.
+
 The target is intentionally transparent to distance sensors; sensors only report obstacle distances.
 
 ## Scene proportions
 
 - Target is a ground cube of size `5 cm x 5 cm x 5 cm`.
-- Obstacles include:
-  - square pillars with `10 cm x 10 cm` footprint,
-  - thin walls with `1.0 m x 10 cm` footprint.
+- Room interior is `2 m x 2 m`.
+- Wall thickness is `5 cm`.
+- Interior wall obstacles are `50 cm x 5 cm`.
+- Car and target spawn at random valid positions inside the room each episode.
 
 ## Environment setup
 

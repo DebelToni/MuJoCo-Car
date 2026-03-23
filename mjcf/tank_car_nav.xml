@@ -10,13 +10,14 @@
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.64 0.78 0.92" rgb2="0.97 0.98 1.0" width="512" height="512"/>
     <texture type="2d" name="ground_tex" builtin="checker" rgb1="0.28 0.31 0.34" rgb2="0.21 0.24 0.27" width="512" height="512" mark="edge" markrgb="0.16 0.18 0.20"/>
-    <material name="ground_mat" texture="ground_tex" texrepeat="35 35" reflectance="0.05"/>
+    <material name="ground_mat" texture="ground_tex" texrepeat="8 8" reflectance="0.05"/>
     <material name="chassis_mat" rgba="0.44 0.46 0.50 1"/>
     <material name="track_mat" rgba="0.07 0.07 0.07 1"/>
     <material name="motor_wheel_mat" rgba="0.13 0.29 0.70 1"/>
     <material name="free_wheel_mat" rgba="0.76 0.76 0.78 1"/>
     <material name="target_mat" rgba="0.18 0.78 0.35 1"/>
-    <material name="obstacle_mat" rgba="0.84 0.39 0.24 1"/>
+    <material name="target_marker_mat" rgba="0.25 1.0 0.35 0.45"/>
+    <material name="wall_mat" rgba="0.84 0.39 0.24 1"/>
   </asset>
 
   <default>
@@ -26,7 +27,7 @@
 
   <worldbody>
     <light name="sun" mode="trackcom" directional="true" pos="0 0 5" dir="0 0 -1" diffuse="0.95 0.95 0.95"/>
-    <geom name="ground" type="plane" size="50 50 0.1" material="ground_mat"/>
+    <geom name="ground" type="plane" size="4 4 0.1" material="ground_mat"/>
 
     <body name="tank" pos="0 0 0.055">
       <joint name="x_joint" type="slide" axis="1 0 0" damping="0.6" armature="0.05"/>
@@ -67,58 +68,21 @@
       <joint name="target_x" type="slide" axis="1 0 0" damping="0.1"/>
       <joint name="target_y" type="slide" axis="0 1 0" damping="0.1"/>
       <geom type="box" size="0.025 0.025 0.025" material="target_mat" mass="0.08" contype="0" conaffinity="0"/>
+      <geom type="box" pos="0 0 -0.020" size="0.08 0.08 0.002" material="target_marker_mat" contype="0" conaffinity="0" mass="0.001"/>
     </body>
 
-    <body name="obstacle_0" pos="0 0 0.12">
-      <joint name="obstacle_0_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_0_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
+    <!-- Room walls: 2m x 2m interior with 5cm thickness -->
+    <geom name="room_wall_north" type="box" pos="0 1.025 0.12" size="1.025 0.025 0.12" material="wall_mat" mass="3"/>
+    <geom name="room_wall_south" type="box" pos="0 -1.025 0.12" size="1.025 0.025 0.12" material="wall_mat" mass="3"/>
+    <geom name="room_wall_east" type="box" pos="1.025 0 0.12" size="0.025 1.025 0.12" material="wall_mat" mass="3"/>
+    <geom name="room_wall_west" type="box" pos="-1.025 0 0.12" size="0.025 1.025 0.12" material="wall_mat" mass="3"/>
 
-    <body name="obstacle_1" pos="0 0 0.12">
-      <joint name="obstacle_1_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_1_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
+    <!-- Minimal interior obstacles: 50cm x 5cm walls -->
+    <geom name="inner_wall_a" type="box" pos="0.35 0.20 0.12" size="0.25 0.025 0.12" material="wall_mat" mass="3"/>
+    <geom name="inner_wall_b" type="box" pos="-0.30 -0.25 0.12" euler="0 0 1.57079632679" size="0.25 0.025 0.12" material="wall_mat" mass="3"/>
 
-    <body name="obstacle_2" pos="0 0 0.12">
-      <joint name="obstacle_2_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_2_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
-
-    <body name="obstacle_3" pos="0 0 0.12">
-      <joint name="obstacle_3_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_3_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
-
-    <body name="obstacle_4" pos="0 0 0.12">
-      <joint name="obstacle_4_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_4_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
-
-    <body name="obstacle_5" pos="0 0 0.12">
-      <joint name="obstacle_5_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_5_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" euler="0 0 1.57079632679" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
-
-    <body name="obstacle_6" pos="0 0 0.12">
-      <joint name="obstacle_6_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_6_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
-
-    <body name="obstacle_7" pos="0 0 0.12">
-      <joint name="obstacle_7_x" type="slide" axis="1 0 0" damping="0.1"/>
-      <joint name="obstacle_7_y" type="slide" axis="0 1 0" damping="0.1"/>
-      <geom type="box" euler="0 0 1.57079632679" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
-    </body>
-
-    <camera name="showcase" pos="0 -8.8 6.3" xyaxes="1 0 0 0 0.54 0.84"/>
-    <camera name="topdown" pos="0 0 14" xyaxes="1 0 0 0 1 0"/>
+    <camera name="showcase" pos="0 -3.2 2.2" xyaxes="1 0 0 0 0.57 0.82"/>
+    <camera name="topdown" pos="0 0 3.0" xyaxes="1 0 0 0 1 0"/>
   </worldbody>
 
   <actuator>

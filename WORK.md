@@ -82,6 +82,17 @@ Build a fresh MuJoCo + MJX tank-car RL project in this empty directory, includin
 - Cleared all legacy run folders by deleting `outputs/` for a fresh start.
 - Added top-down camera (`topdown`) in MJCF and updated render/viewer scripts to support `--camera`.
 - Added GPU training preset launcher: `scripts/train_preset_gpu.sh`.
+- Replaced local `assets/tank_car.xacro` with user-provided `~/Desktop/tank_car.xacro`.
+- Applied requested Xacro tweak: moved both chain tracks farther from the platform by `+5 cm` per side.
+- Refactored environment to a minimal room setup:
+  - 2m x 2m room walls,
+  - 5cm wall thickness,
+  - minimal interior walls of 50cm x 5cm,
+  - random car spawn and random target spawn inside the room.
+- Sensors remain 4 front rays and continue to ignore target geometry.
+- Updated control cadence to reduce jitter:
+  - policy still outputs 2 wheel-speed actions (left/right),
+  - each action is now held for ~0.48s (`action_hold_steps=6`) before next decision.
 
 ## Pending Validation
 - Fresh training run with the new scene/sensor setup.

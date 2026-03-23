@@ -194,20 +194,31 @@ def oracle_action_from_state(env: TankNavEnv, state: dict[str, jnp.ndarray]) -> 
     heading = yaw + 0.5 * np.pi
 
     target = np.asarray(state["target_xy"], dtype=np.float32)
-    obstacles = np.asarray(state["obstacles_xy"], dtype=np.float32)
-    obstacle_radii = np.asarray(env.obstacle_radii, dtype=np.float32)
+    wall_centers = np.asarray(env.wall_centers, dtype=np.float32)
+    wall_half_extents = np.asarray(env.wall_half_extents, dtype=np.float32)
+    wall_yaws = np.asarray(env.wall_yaws, dtype=np.float32)
 
     to_goal = target - car
     goal_dist = np.linalg.norm(to_goal) + 1e-6
     force = to_goal / goal_dist
 
-    for center, radius in zip(obstacles, obstacle_radii, strict=False):
+    for center, half_extents, wall_yaw in zip(wall_centers, wall_half_extents, wall_yaws, strict=False):
+        c = float(np.cos(wall_yaw))
+        s = float(np.sin(wall_yaw))
         rel = car - center
-        center_dist = np.linalg.norm(rel) + 1e-6
-        clearance = center_dist - (float(radius) + float(env.config.car_radius))
-        if clearance < 2.2:
-            strength = 1.35 / (clearance + 0.45)
-            force += strength * (rel / center_dist)
+        local = np.asarray([c * rel[0] + s * rel[1], -s * rel[0] + c * rel[1]], dtype=np.float32)
+        closest_local = np.clip(local, -half_extents, half_extents)
+        closest_world = center + np.asarray(
+            [c * closest_local[0] - s * closest_local[1], s * closest_local[0] + c * closest_local[1]],
+            dtype=np.float32,
+        )
+
+        away = car - closest_world
+        dist = np.linalg.norm(away)
+        clearance = dist - float(env.config.car_radius)
+        if clearance < 0.6:
+            strength = 1.2 / (clearance + 0.3)
+            force += strength * (away / (dist + 1e-6))
 
     desired_heading = float(np.arctan2(force[1], force[0]))
     err = (desired_heading - heading + np.pi) % (2.0 * np.pi) - np.pi
@@ -344,7 +355,7 @@ def main() -> None:
     parser.add_argument("--target-accuracy", type=float, default=0.95)
     parser.add_argument("--rollout-episodes", type=int, default=18)
     parser.add_argument("--eval-episodes", type=int, default=32)
-    parser.add_argument("--max-steps", type=int, default=520)
+    parser.add_argument("--max-steps", type=int, default=90)
     parser.add_argument("--update-epochs", type=int, default=7)
     parser.add_argument("--learning-rate", type=float, default=2.5e-4)
     parser.add_argument("--gamma", type=float, default=0.99)

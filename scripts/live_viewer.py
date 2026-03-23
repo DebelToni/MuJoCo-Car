@@ -44,7 +44,7 @@ def main() -> None:
 
     state, obs = _reset(episode_idx)
     data = mujoco.MjData(env.host_model)
-    dt = env.host_model.opt.timestep * env.config.frame_skip
+    dt = env.host_model.opt.timestep * env.config.frame_skip * env.config.action_hold_steps
 
     with mujoco.viewer.launch_passive(env.host_model, data, show_left_ui=True, show_right_ui=True) as viewer:
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED

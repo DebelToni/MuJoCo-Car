@@ -21,38 +21,21 @@ def _name_to_id(model: mujoco.MjModel, obj_type: int, name: str) -> int:
 class EnvConfig:
     xml_path: Path
     frame_skip: int = 4
-    max_steps: int = 520
-    sensor_range: float = 12.0
-    target_min_dist: float = 5.0
-    target_max_dist: float = 10.0
-    spawn_angle_min: float = 0.45 * jnp.pi
-    spawn_angle_max: float = 0.55 * jnp.pi
-    obstacle_min_dist: float = 1.8
-    obstacle_max_dist: float = 9.5
-    world_limit: float = 14.0
-    target_half_size: float = 0.025
+    action_hold_steps: int = 6
+    max_steps: int = 420
+    sensor_range: float = 3.0
+
+    room_half_size: float = 1.0
+    wall_thickness: float = 0.05
+    interior_wall_length: float = 0.50
+    interior_wall_width: float = 0.05
+
+    car_spawn_margin: float = 0.22
+    target_spawn_margin: float = 0.22
+    min_spawn_separation: float = 0.35
     target_success_radius: float = 0.12
-    obstacle_half_sizes: tuple[tuple[float, float], ...] = (
-        (0.05, 0.05),
-        (0.05, 0.05),
-        (0.05, 0.05),
-        (0.05, 0.05),
-        (0.50, 0.05),
-        (0.50, 0.05),
-        (0.50, 0.05),
-        (0.50, 0.05),
-    )
-    obstacle_yaws: tuple[float, ...] = (
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.5 * jnp.pi,
-        0.0,
-        0.5 * jnp.pi,
-    )
-    car_radius: float = 0.17
+
+    car_radius: float = 0.10
     max_track_speed: float = 1.25
     track_separation: float = 0.036
 
@@ -77,25 +60,8 @@ class TankNavEnv:
         self.target_x_qpos, _ = self._joint_indices("target_x")
         self.target_y_qpos, _ = self._joint_indices("target_y")
 
-        if len(config.obstacle_half_sizes) != 8:
-            raise ValueError("This scene expects exactly 8 obstacle footprints.")
-        if len(config.obstacle_yaws) != 8:
-            raise ValueError("This scene expects exactly 8 obstacle yaws.")
-        self.obstacle_half_extents = jnp.asarray(config.obstacle_half_sizes, dtype=jnp.float32)
-        self.obstacle_yaws = jnp.asarray(config.obstacle_yaws, dtype=jnp.float32)
-        self.obstacle_footprint_radii = jnp.linalg.norm(self.obstacle_half_extents, axis=1)
-
-        obstacle_x_idx = []
-        obstacle_y_idx = []
-        for i in range(8):
-            ox, _ = self._joint_indices(f"obstacle_{i}_x")
-            oy, _ = self._joint_indices(f"obstacle_{i}_y")
-            obstacle_x_idx.append(ox)
-            obstacle_y_idx.append(oy)
-        self.obstacle_x_qpos_idx = jnp.asarray(obstacle_x_idx, dtype=jnp.int32)
-        self.obstacle_y_qpos_idx = jnp.asarray(obstacle_y_idx, dtype=jnp.int32)
-
         self.home_qpos = jnp.asarray(self.host_model.qpos0, dtype=jnp.float32)
+
         self.sensor_angles = jnp.asarray(
             [jnp.pi / 5.0, 2.0 * jnp.pi / 5.0, 3.0 * jnp.pi / 5.0, 4.0 * jnp.pi / 5.0],
             dtype=jnp.float32,
@@ -109,12 +75,61 @@ class TankNavEnv:
         self.kp_lin = jnp.array(58.0, dtype=jnp.float32)
         self.kp_yaw = jnp.array(9.5, dtype=jnp.float32)
 
+        self.wall_centers, self.wall_half_extents, self.wall_yaws = self._build_wall_boxes()
+
         self.reset = jax.jit(self._reset)
         self.step = jax.jit(self._step)
 
     def _joint_indices(self, joint_name: str) -> tuple[int, int]:
         jid = _name_to_id(self.host_model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
         return int(self.host_model.jnt_qposadr[jid]), int(self.host_model.jnt_dofadr[jid])
+
+    def _build_wall_boxes(self) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        room = self.config.room_half_size
+        thick_half = 0.5 * self.config.wall_thickness
+
+        perimeter_centers = jnp.asarray(
+            [
+                [0.0, room + thick_half],
+                [0.0, -(room + thick_half)],
+                [room + thick_half, 0.0],
+                [-(room + thick_half), 0.0],
+            ],
+            dtype=jnp.float32,
+        )
+        perimeter_half_extents = jnp.asarray(
+            [
+                [room + thick_half, thick_half],
+                [room + thick_half, thick_half],
+                [thick_half, room + thick_half],
+                [thick_half, room + thick_half],
+            ],
+            dtype=jnp.float32,
+        )
+        perimeter_yaws = jnp.zeros((4,), dtype=jnp.float32)
+
+        inner_half_len = 0.5 * self.config.interior_wall_length
+        inner_half_wid = 0.5 * self.config.interior_wall_width
+        inner_centers = jnp.asarray(
+            [
+                [0.35, 0.20],
+                [-0.30, -0.25],
+            ],
+            dtype=jnp.float32,
+        )
+        inner_half_extents = jnp.asarray(
+            [
+                [inner_half_len, inner_half_wid],
+                [inner_half_len, inner_half_wid],
+            ],
+            dtype=jnp.float32,
+        )
+        inner_yaws = jnp.asarray([0.0, 0.5 * jnp.pi], dtype=jnp.float32)
+
+        centers = jnp.concatenate([perimeter_centers, inner_centers], axis=0)
+        half_extents = jnp.concatenate([perimeter_half_extents, inner_half_extents], axis=0)
+        yaws = jnp.concatenate([perimeter_yaws, inner_yaws], axis=0)
+        return centers, half_extents, yaws
 
     @staticmethod
     def _rotate(v: jnp.ndarray, yaw: jnp.ndarray) -> jnp.ndarray:
@@ -188,9 +203,8 @@ class TankNavEnv:
         inside = jnp.minimum(jnp.maximum(q[0], q[1]), 0.0)
         return outside + inside
 
-    def _sensor_distances(self, car_xy: jnp.ndarray, yaw: jnp.ndarray, obstacles_xy: jnp.ndarray):
+    def _sensor_distances(self, car_xy: jnp.ndarray, yaw: jnp.ndarray) -> jnp.ndarray:
         sensor_origin = car_xy + self._rotate(self.sensor_front_offset, yaw)
-
         angles_world = self.sensor_angles + yaw
         dirs = jnp.stack([jnp.cos(angles_world), jnp.sin(angles_world)], axis=1)
         max_range = jnp.asarray(self.config.sensor_range, dtype=jnp.float32)
@@ -198,15 +212,15 @@ class TankNavEnv:
         def cast_one(d: jnp.ndarray) -> jnp.ndarray:
             dists = jax.vmap(
                 lambda c, h, a: self._ray_box_distance(sensor_origin, d, c, h, a, max_range)
-            )(obstacles_xy, self.obstacle_half_extents, self.obstacle_yaws)
+            )(self.wall_centers, self.wall_half_extents, self.wall_yaws)
             return jnp.min(dists)
 
         return jax.vmap(cast_one)(dirs)
 
-    def _raw_sensor_observation(self, data: Any, obstacles_xy: jnp.ndarray) -> jnp.ndarray:
+    def _raw_sensor_observation(self, data: Any) -> jnp.ndarray:
         car_xy = jnp.asarray([data.qpos[self.car_x_qpos], data.qpos[self.car_y_qpos]], dtype=jnp.float32)
         yaw = data.qpos[self.car_yaw_qpos]
-        dists = self._sensor_distances(car_xy, yaw, obstacles_xy)
+        dists = self._sensor_distances(car_xy, yaw)
         return jnp.clip(dists / self.config.sensor_range, 0.0, 1.0)
 
     def _goal_features(self, car_xy: jnp.ndarray, yaw: jnp.ndarray, target_xy: jnp.ndarray) -> jnp.ndarray:
@@ -218,7 +232,7 @@ class TankNavEnv:
 
         cos_err = jnp.dot(heading_vec, goal_dir)
         sin_err = heading_vec[0] * goal_dir[1] - heading_vec[1] * goal_dir[0]
-        dist_norm = jnp.clip(dist / self.config.target_max_dist, 0.0, 1.0)
+        dist_norm = jnp.clip(dist / (2.0 * self.config.room_half_size), 0.0, 1.0)
         return jnp.asarray([dist_norm, cos_err, sin_err], dtype=jnp.float32)
 
     def _compose_observation(
@@ -232,94 +246,43 @@ class TankNavEnv:
         goal_features = self._goal_features(car_xy, yaw, target_xy)
         return jnp.concatenate([sensor_flat, goal_features], axis=0)
 
-    def _spawn_target(self, key: jax.Array) -> tuple[jax.Array, jnp.ndarray]:
-        key, k_r, k_a = jax.random.split(key, 3)
-        r = jax.random.uniform(
-            k_r,
-            (),
-            minval=jnp.asarray(self.config.target_min_dist, dtype=jnp.float32),
-            maxval=jnp.asarray(self.config.target_max_dist, dtype=jnp.float32),
-        )
-        a = jax.random.uniform(
-            k_a,
-            (),
-            minval=jnp.asarray(self.config.spawn_angle_min, dtype=jnp.float32),
-            maxval=jnp.asarray(self.config.spawn_angle_max, dtype=jnp.float32),
-        )
-        target = jnp.asarray([r * jnp.cos(a), r * jnp.sin(a)], dtype=jnp.float32)
-        return key, target
-
-    def _spawn_obstacles(self, key: jax.Array, target_xy: jnp.ndarray) -> tuple[jax.Array, jnp.ndarray]:
-        key, k_r, k_a = jax.random.split(key, 3)
-        n = self.obstacle_half_extents.shape[0]
-
-        radii = jax.random.uniform(
-            k_r,
-            (n,),
-            minval=jnp.asarray(self.config.obstacle_min_dist, dtype=jnp.float32),
-            maxval=jnp.asarray(self.config.obstacle_max_dist, dtype=jnp.float32),
-        )
-        angles = jax.random.uniform(
-            k_a,
-            (n,),
-            minval=jnp.asarray(-jnp.pi, dtype=jnp.float32),
-            maxval=jnp.asarray(jnp.pi, dtype=jnp.float32),
-        )
-
-        pts = jnp.stack([radii * jnp.cos(angles), radii * jnp.sin(angles)], axis=1)
-
-        dist_from_car = jnp.linalg.norm(pts, axis=1)
-        min_from_car = 1.2 + self.obstacle_footprint_radii
-        scale_car = jnp.maximum(1.0, min_from_car / (dist_from_car + 1e-6))
-        pts = pts * scale_car[:, None]
-
-        vec_t = pts - target_xy[None, :]
-        dist_t = jnp.linalg.norm(vec_t, axis=1)
-        min_from_target = 1.0 + self.obstacle_footprint_radii + self.config.target_half_size
-        scale_t = jnp.maximum(1.0, min_from_target / (dist_t + 1e-6))
-        pts = target_xy[None, :] + vec_t * scale_t[:, None]
-
-        target_dist = jnp.linalg.norm(target_xy) + 1e-6
-        fwd = target_xy / target_dist
-        side = jnp.asarray([-fwd[1], fwd[0]], dtype=jnp.float32)
-
-        proj = jnp.sum(pts * fwd[None, :], axis=1)
-        lat = jnp.sum(pts * side[None, :], axis=1)
-        in_segment = jnp.logical_and(proj > 0.6, proj < target_dist - 0.8)
-        corridor_half = 0.9 + self.obstacle_footprint_radii
-        corridor_hit = jnp.logical_and(in_segment, jnp.abs(lat) < corridor_half)
-        lat_target = jnp.sign(lat + 1e-3) * corridor_half
-        pts = pts + jnp.where(corridor_hit, lat_target - lat, 0.0)[:, None] * side[None, :]
-
-        pts = jnp.clip(pts, -self.config.world_limit + 0.5, self.config.world_limit - 0.5)
-        return key, pts
+    def _sample_xy(self, key: jax.Array, margin: float) -> jnp.ndarray:
+        lim = self.config.room_half_size - margin
+        return jax.random.uniform(key, (2,), minval=-lim, maxval=lim, dtype=jnp.float32)
 
     def _reset(self, key: jax.Array) -> tuple[dict[str, Any], jnp.ndarray]:
-        key, target_key, obs_key = jax.random.split(key, 3)
+        key, car_key, target_key, yaw_key, sep_key = jax.random.split(key, 5)
 
         qpos = jnp.array(self.home_qpos)
         qvel = jnp.zeros((self.nv,), dtype=jnp.float32)
 
-        qpos = qpos.at[self.car_x_qpos].set(0.0)
-        qpos = qpos.at[self.car_y_qpos].set(0.0)
-        qpos = qpos.at[self.car_yaw_qpos].set(0.0)
+        car_xy = self._sample_xy(car_key, self.config.car_spawn_margin)
+        target_xy = self._sample_xy(target_key, self.config.target_spawn_margin)
+        yaw = jax.random.uniform(yaw_key, (), minval=-jnp.pi, maxval=jnp.pi)
 
-        _, target_xy = self._spawn_target(target_key)
-        _, obstacles_xy = self._spawn_obstacles(obs_key, target_xy)
+        vec = target_xy - car_xy
+        dist = jnp.linalg.norm(vec)
+        sep_angle = jax.random.uniform(sep_key, (), minval=-jnp.pi, maxval=jnp.pi)
+        fallback_dir = jnp.asarray([jnp.cos(sep_angle), jnp.sin(sep_angle)], dtype=jnp.float32)
+        dir_vec = jnp.where(dist > 1e-3, vec / (dist + 1e-6), fallback_dir)
+        adjusted_dist = jnp.maximum(dist, self.config.min_spawn_separation)
+        target_xy = car_xy + adjusted_dist * dir_vec
+        lim_t = self.config.room_half_size - self.config.target_spawn_margin
+        target_xy = jnp.clip(target_xy, -lim_t, lim_t)
 
+        qpos = qpos.at[self.car_x_qpos].set(car_xy[0])
+        qpos = qpos.at[self.car_y_qpos].set(car_xy[1])
+        qpos = qpos.at[self.car_yaw_qpos].set(yaw)
         qpos = qpos.at[self.target_x_qpos].set(target_xy[0])
         qpos = qpos.at[self.target_y_qpos].set(target_xy[1])
-
-        qpos = qpos.at[self.obstacle_x_qpos_idx].set(obstacles_xy[:, 0])
-        qpos = qpos.at[self.obstacle_y_qpos_idx].set(obstacles_xy[:, 1])
 
         ctrl = jnp.zeros((self.nu,), dtype=jnp.float32)
         data = mjx.make_data(self.model)
         data = data.replace(qpos=qpos, qvel=qvel, ctrl=ctrl)
         data = mjx.forward(self.model, data)
 
-        dist0 = jnp.linalg.norm(target_xy)
-        raw_obs = self._raw_sensor_observation(data, obstacles_xy)
+        dist0 = jnp.linalg.norm(target_xy - car_xy)
+        raw_obs = self._raw_sensor_observation(data)
         sensor_hist = jnp.repeat(raw_obs[None, :], self.stack_size, axis=0)
 
         state = {
@@ -327,15 +290,12 @@ class TankNavEnv:
             "step": jnp.array(0, dtype=jnp.int32),
             "prev_dist": dist0,
             "target_xy": target_xy,
-            "obstacles_xy": obstacles_xy,
             "success": jnp.array(False),
             "collision": jnp.array(False),
             "last_action": jnp.zeros((2,), dtype=jnp.float32),
             "sensor_hist": sensor_hist,
             "rng": key,
         }
-        car_xy = jnp.asarray([data.qpos[self.car_x_qpos], data.qpos[self.car_y_qpos]], dtype=jnp.float32)
-        yaw = data.qpos[self.car_yaw_qpos]
         obs = self._compose_observation(sensor_hist, car_xy, yaw, target_xy)
         return state, obs
 
@@ -344,7 +304,7 @@ class TankNavEnv:
 
         data = state["data"]
         yaw = data.qpos[self.car_yaw_qpos]
-        heading = yaw + 0.5 * jnp.pi
+        heading_cmd = yaw + 0.5 * jnp.pi
 
         left = action[0]
         right = action[1]
@@ -353,8 +313,8 @@ class TankNavEnv:
         v = 0.5 * (v_l + v_r)
         omega = (v_r - v_l) / (self.config.track_separation + 1e-6)
 
-        vx_des = v * jnp.cos(heading)
-        vy_des = v * jnp.sin(heading)
+        vx_des = v * jnp.cos(heading_cmd)
+        vy_des = v * jnp.sin(heading_cmd)
         wz_des = omega
 
         qvel = data.qvel
@@ -369,14 +329,14 @@ class TankNavEnv:
         def _substep(_, d):
             return mjx.step(self.model, d)
 
-        data = jax.lax.fori_loop(0, self.config.frame_skip, _substep, data)
+        total_substeps = self.config.frame_skip * self.config.action_hold_steps
+        data = jax.lax.fori_loop(0, total_substeps, _substep, data)
 
         car_xy = jnp.asarray([data.qpos[self.car_x_qpos], data.qpos[self.car_y_qpos]], dtype=jnp.float32)
         yaw = data.qpos[self.car_yaw_qpos]
         target_xy = state["target_xy"]
-        obstacles_xy = state["obstacles_xy"]
 
-        sensor_dists = self._sensor_distances(car_xy, yaw, obstacles_xy)
+        sensor_dists = self._sensor_distances(car_xy, yaw)
         raw_obs = jnp.clip(sensor_dists / self.config.sensor_range, 0.0, 1.0)
         sensor_hist = jnp.concatenate([state["sensor_hist"][1:], raw_obs[None, :]], axis=0)
         obs = self._compose_observation(sensor_hist, car_xy, yaw, target_xy)
@@ -386,20 +346,21 @@ class TankNavEnv:
 
         clearances = jax.vmap(
             lambda c, h, a: self._point_box_signed_distance(car_xy, c, h, a) - self.config.car_radius
-        )(obstacles_xy, self.obstacle_half_extents, self.obstacle_yaws)
+        )(self.wall_centers, self.wall_half_extents, self.wall_yaws)
         min_clearance = jnp.min(clearances)
         collision = min_clearance < 0.0
 
+        heading = yaw + 0.5 * jnp.pi
         heading_vec = jnp.asarray([jnp.cos(heading), jnp.sin(heading)], dtype=jnp.float32)
         goal_vec = (target_xy - car_xy) / (dist_target + 1e-6)
         heading_align = jnp.dot(heading_vec, goal_vec)
 
         sensor_min = jnp.min(sensor_dists)
-        obstacle_penalty = jnp.clip((1.0 - sensor_min / 1.2), 0.0, 1.0)
+        obstacle_penalty = jnp.clip((1.0 - sensor_min / 0.45), 0.0, 1.0)
 
         action_cost = 0.008 * jnp.sum(jnp.square(action - state["last_action"]))
         success = dist_target < self.config.target_success_radius
-        out_of_bounds = jnp.any(jnp.abs(car_xy) > self.config.world_limit)
+        out_of_bounds = jnp.any(jnp.abs(car_xy) > (self.config.room_half_size + 0.10))
 
         reward = (
             24.0 * progress
@@ -420,7 +381,6 @@ class TankNavEnv:
             "step": step,
             "prev_dist": dist_target,
             "target_xy": target_xy,
-            "obstacles_xy": obstacles_xy,
             "success": jnp.logical_or(state["success"], success),
             "collision": jnp.logical_or(state["collision"], collision),
             "last_action": action,

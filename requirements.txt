@@ -1,8 +1,8 @@
-mujoco>=3.3.0
-jax>=0.4.33
-jaxlib>=0.4.33
-optax>=0.2.3
-numpy>=1.26
-matplotlib>=3.9
-imageio>=2.36
-xacro>=2.1.1
+mujoco
+jax
+jaxlib
+optax
+numpy
+matplotlib
+imageio
+xacro
