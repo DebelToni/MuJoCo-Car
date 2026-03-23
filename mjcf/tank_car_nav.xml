@@ -1,0 +1,131 @@
+<mujoco model="tank_car_nav">
+  <compiler angle="radian" autolimits="true"/>
+
+  <option timestep="0.02" gravity="0 0 -9.81" integrator="RK4"/>
+
+  <visual>
+    <map znear="0.01"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.64 0.78 0.92" rgb2="0.97 0.98 1.0" width="512" height="512"/>
+    <texture type="2d" name="ground_tex" builtin="checker" rgb1="0.28 0.31 0.34" rgb2="0.21 0.24 0.27" width="512" height="512" mark="edge" markrgb="0.16 0.18 0.20"/>
+    <material name="ground_mat" texture="ground_tex" texrepeat="35 35" reflectance="0.05"/>
+    <material name="chassis_mat" rgba="0.44 0.46 0.50 1"/>
+    <material name="track_mat" rgba="0.07 0.07 0.07 1"/>
+    <material name="motor_wheel_mat" rgba="0.13 0.29 0.70 1"/>
+    <material name="free_wheel_mat" rgba="0.76 0.76 0.78 1"/>
+    <material name="target_mat" rgba="0.18 0.78 0.35 1"/>
+    <material name="obstacle_mat" rgba="0.84 0.39 0.24 1"/>
+  </asset>
+
+  <default>
+    <joint damping="0.2" armature="0.02"/>
+    <geom condim="4" friction="1.5 0.06 0.01" solref="0.008 1" solimp="0.95 0.995 0.0001"/>
+  </default>
+
+  <worldbody>
+    <light name="sun" mode="trackcom" directional="true" pos="0 0 5" dir="0 0 -1" diffuse="0.95 0.95 0.95"/>
+    <geom name="ground" type="plane" size="50 50 0.1" material="ground_mat"/>
+
+    <body name="tank" pos="0 0 0.055">
+      <joint name="x_joint" type="slide" axis="1 0 0" damping="0.6" armature="0.05"/>
+      <joint name="y_joint" type="slide" axis="0 1 0" damping="0.6" armature="0.05"/>
+      <joint name="yaw_joint" type="hinge" axis="0 0 1" damping="0.25" armature="0.02"/>
+
+      <geom name="chassis" type="box" pos="0 0 0" size="0.025 0.05 0.01" mass="1.6" material="chassis_mat"/>
+      <geom name="track_left" type="box" pos="-0.018 0 -0.049" size="0.010 0.044 0.004" mass="0.28" material="track_mat" friction="1.8 0.08 0.01"/>
+      <geom name="track_right" type="box" pos="0.018 0 -0.049" size="0.010 0.044 0.004" mass="0.28" material="track_mat" friction="1.8 0.08 0.01"/>
+
+      <body name="wheel_top_left_motor" pos="-0.020 0.043 -0.040">
+        <joint name="joint_top_left_motor" type="hinge" axis="0 1 0" damping="0.02"/>
+        <geom type="cylinder" euler="1.57079632679 0 0" size="0.010 0.007" material="motor_wheel_mat" mass="0.08" contype="0" conaffinity="0"/>
+      </body>
+
+      <body name="wheel_top_right_free" pos="0.020 0.043 -0.040">
+        <joint name="joint_top_right_free" type="hinge" axis="0 1 0" damping="0.006"/>
+        <geom type="cylinder" euler="1.57079632679 0 0" size="0.010 0.007" material="free_wheel_mat" mass="0.08" contype="0" conaffinity="0"/>
+      </body>
+
+      <body name="wheel_bottom_left_free" pos="-0.020 -0.043 -0.040">
+        <joint name="joint_bottom_left_free" type="hinge" axis="0 1 0" damping="0.006"/>
+        <geom type="cylinder" euler="1.57079632679 0 0" size="0.010 0.007" material="free_wheel_mat" mass="0.08" contype="0" conaffinity="0"/>
+      </body>
+
+      <body name="wheel_bottom_right_motor" pos="0.020 -0.043 -0.040">
+        <joint name="joint_bottom_right_motor" type="hinge" axis="0 1 0" damping="0.02"/>
+        <geom type="cylinder" euler="1.57079632679 0 0" size="0.010 0.007" material="motor_wheel_mat" mass="0.08" contype="0" conaffinity="0"/>
+      </body>
+
+      <site name="sensor_front_1" pos="0 0.052 -0.008" zaxis="0.80901699 0.58778525 0" size="0.002" rgba="0.9 0.2 0.2 1"/>
+      <site name="sensor_front_2" pos="0 0.052 -0.008" zaxis="0.30901699 0.95105652 0" size="0.002" rgba="0.9 0.5 0.2 1"/>
+      <site name="sensor_front_3" pos="0 0.052 -0.008" zaxis="-0.30901699 0.95105652 0" size="0.002" rgba="0.9 0.8 0.2 1"/>
+      <site name="sensor_front_4" pos="0 0.052 -0.008" zaxis="-0.80901699 0.58778525 0" size="0.002" rgba="0.2 0.9 0.9 1"/>
+    </body>
+
+    <body name="target" pos="0 0 0.025">
+      <joint name="target_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="target_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" size="0.025 0.025 0.025" material="target_mat" mass="0.08" contype="0" conaffinity="0"/>
+    </body>
+
+    <body name="obstacle_0" pos="0 0 0.12">
+      <joint name="obstacle_0_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_0_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <body name="obstacle_1" pos="0 0 0.12">
+      <joint name="obstacle_1_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_1_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <body name="obstacle_2" pos="0 0 0.12">
+      <joint name="obstacle_2_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_2_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <body name="obstacle_3" pos="0 0 0.12">
+      <joint name="obstacle_3_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_3_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" size="0.05 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <body name="obstacle_4" pos="0 0 0.12">
+      <joint name="obstacle_4_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_4_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <body name="obstacle_5" pos="0 0 0.12">
+      <joint name="obstacle_5_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_5_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" euler="0 0 1.57079632679" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <body name="obstacle_6" pos="0 0 0.12">
+      <joint name="obstacle_6_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_6_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <body name="obstacle_7" pos="0 0 0.12">
+      <joint name="obstacle_7_x" type="slide" axis="1 0 0" damping="0.1"/>
+      <joint name="obstacle_7_y" type="slide" axis="0 1 0" damping="0.1"/>
+      <geom type="box" euler="0 0 1.57079632679" size="0.50 0.05 0.12" material="obstacle_mat" mass="3"/>
+    </body>
+
+    <camera name="showcase" pos="0 -8.8 6.3" xyaxes="1 0 0 0 0.54 0.84"/>
+    <camera name="topdown" pos="0 0 14" xyaxes="1 0 0 0 1 0"/>
+  </worldbody>
+
+  <actuator>
+    <motor name="drive_x" joint="x_joint" ctrllimited="true" ctrlrange="-85 85"/>
+    <motor name="drive_y" joint="y_joint" ctrllimited="true" ctrlrange="-85 85"/>
+    <motor name="drive_yaw" joint="yaw_joint" ctrllimited="true" ctrlrange="-18 18"/>
+    <motor name="motor_top_left" joint="joint_top_left_motor" ctrllimited="true" ctrlrange="-6 6"/>
+    <motor name="motor_bottom_right" joint="joint_bottom_right_motor" ctrllimited="true" ctrlrange="-6 6"/>
+  </actuator>
+</mujoco>
