@@ -93,6 +93,12 @@ Build a fresh MuJoCo + MJX tank-car RL project in this empty directory, includin
 - Updated control cadence to reduce jitter:
   - policy still outputs 2 wheel-speed actions (left/right),
   - each action is now held for ~0.48s (`action_hold_steps=6`) before next decision.
+- Added temporary unconstrained-learning mode:
+  - policy observation switched to goal-only (`distance`, `cos/sin heading error`),
+  - sensor values no longer fed into the network,
+  - collision no longer terminates episodes,
+  - collision penalty and obstacle shaping removed from reward,
+  - control force scaled to `0.1x` for slower movement.
 
 ## Pending Validation
 - Fresh training run with the new scene/sensor setup.

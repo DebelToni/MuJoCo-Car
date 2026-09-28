@@ -32,8 +32,11 @@ No center ray is used. The policy input uses:
 - a short temporal stack of these same 4 readings (3 frames), and
 - target guidance features (`distance_to_target`, `cos(heading_error)`, `sin(heading_error)`).
 
+Current simplified training mode is goal-only observation (distance/cos/sin target cues), with sensor values not fed into the policy.
+
 Policy action has 2 outputs: left-track speed command and right-track speed command (both normalized in `[-1, 1]`).
 Each action is held for about `0.48s` (`frame_skip=4`, `action_hold_steps=6`) before the next network decision.
+Wheel/body control force is scaled down to `0.1x` for slower motion.
 
 The target is intentionally transparent to distance sensors; sensors only report obstacle distances.
 

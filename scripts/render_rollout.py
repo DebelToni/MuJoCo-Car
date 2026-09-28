@@ -64,6 +64,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=3)
     parser.add_argument("--steps", type=int, default=520)
     parser.add_argument("--camera", type=str, default="topdown")
+    parser.add_argument("--substep-frames", action="store_true")
     parser.add_argument("--gif", type=Path, default=Path("outputs/main_run/rollout.gif"))
     parser.add_argument("--chart", type=Path, default=Path("outputs/main_run/rollout_dashboard.png"))
     args = parser.parse_args()
@@ -86,17 +87,29 @@ def main() -> None:
 
     for _ in range(args.steps):
         action = deterministic_action(policy, obs)
-        state, obs, reward, done, metrics = env.step(state, action)
+        if args.substep_frames:
+            state, obs, reward, done, metrics, trajectory = env.step_with_trajectory(state, action)
+            for sub in trajectory:
+                host_data.qpos[:] = sub["qpos"]
+                host_data.qvel[:] = sub["qvel"]
+                host_data.ctrl[:] = sub["ctrl"]
+                mujoco.mj_forward(env.host_model, host_data)
 
-        host_data.qpos[:] = np.asarray(state["data"].qpos)
-        host_data.qvel[:] = np.asarray(state["data"].qvel)
-        host_data.ctrl[:] = np.asarray(state["data"].ctrl)
-        mujoco.mj_forward(env.host_model, host_data)
+                renderer.update_scene(host_data, camera=args.camera)
+                frames.append(renderer.render())
+        else:
+            state, obs, reward, done, metrics = env.step(state, action)
+            host_data.qpos[:] = np.asarray(state["data"].qpos)
+            host_data.qvel[:] = np.asarray(state["data"].qvel)
+            host_data.ctrl[:] = np.asarray(state["data"].ctrl)
+            mujoco.mj_forward(env.host_model, host_data)
+            renderer.update_scene(host_data, camera=args.camera)
+            frames.append(renderer.render())
 
-        renderer.update_scene(host_data, camera=args.camera)
-        frames.append(renderer.render())
-
-        sensors.append(np.asarray(obs[sensor_idx_start:sensor_idx_end], dtype=np.float32))
+        if obs.shape[0] >= sensor_idx_end:
+            sensors.append(np.asarray(obs[sensor_idx_start:sensor_idx_end], dtype=np.float32))
+        else:
+            sensors.append(np.full((4,), np.nan, dtype=np.float32))
         dists.append(float(np.asarray(metrics["dist_target"])))
         rewards.append(float(np.asarray(reward)))
 

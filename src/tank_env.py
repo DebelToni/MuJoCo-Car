@@ -7,6 +7,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import mujoco
+import numpy as np
 from mujoco import mjx
 
 
@@ -38,6 +39,8 @@ class EnvConfig:
     car_radius: float = 0.10
     max_track_speed: float = 1.25
     track_separation: float = 0.036
+    control_force_scale: float = 0.1
+    goal_only_observation: bool = True
 
 
 class TankNavEnv:
@@ -69,7 +72,7 @@ class TankNavEnv:
         self.sensor_front_offset = jnp.asarray([0.0, 0.052], dtype=jnp.float32)
         self.stack_size = 3
 
-        self.obs_size = 4 * self.stack_size + 3
+        self.obs_size = 3 if self.config.goal_only_observation else (4 * self.stack_size + 3)
         self.action_size = 2
 
         self.kp_lin = jnp.array(58.0, dtype=jnp.float32)
@@ -242,8 +245,10 @@ class TankNavEnv:
         yaw: jnp.ndarray,
         target_xy: jnp.ndarray,
     ) -> jnp.ndarray:
-        sensor_flat = jnp.reshape(sensor_hist, (-1,))
         goal_features = self._goal_features(car_xy, yaw, target_xy)
+        if self.config.goal_only_observation:
+            return goal_features
+        sensor_flat = jnp.reshape(sensor_hist, (-1,))
         return jnp.concatenate([sensor_flat, goal_features], axis=0)
 
     def _sample_xy(self, key: jax.Array, margin: float) -> jnp.ndarray:
@@ -318,11 +323,12 @@ class TankNavEnv:
         wz_des = omega
 
         qvel = data.qvel
-        fx = self.kp_lin * (vx_des - qvel[self.car_x_qvel])
-        fy = self.kp_lin * (vy_des - qvel[self.car_y_qvel])
-        tz = self.kp_yaw * (wz_des - qvel[self.car_yaw_qvel])
+        force_scale = self.config.control_force_scale
+        fx = force_scale * self.kp_lin * (vx_des - qvel[self.car_x_qvel])
+        fy = force_scale * self.kp_lin * (vy_des - qvel[self.car_y_qvel])
+        tz = force_scale * self.kp_yaw * (wz_des - qvel[self.car_yaw_qvel])
 
-        ctrl = jnp.asarray([fx, fy, tz, 4.0 * left, 4.0 * right], dtype=jnp.float32)
+        ctrl = jnp.asarray([fx, fy, tz, 4.0 * force_scale * left, 4.0 * force_scale * right], dtype=jnp.float32)
         ctrl = jnp.clip(ctrl, self.ctrl_min, self.ctrl_max)
         data = data.replace(ctrl=ctrl)
 
@@ -356,7 +362,6 @@ class TankNavEnv:
         heading_align = jnp.dot(heading_vec, goal_vec)
 
         sensor_min = jnp.min(sensor_dists)
-        obstacle_penalty = jnp.clip((1.0 - sensor_min / 0.45), 0.0, 1.0)
 
         action_cost = 0.008 * jnp.sum(jnp.square(action - state["last_action"]))
         success = dist_target < self.config.target_success_radius
@@ -365,16 +370,14 @@ class TankNavEnv:
         reward = (
             24.0 * progress
             + 0.60 * heading_align
-            - 0.35 * obstacle_penalty
             - action_cost
             - 0.01
             + jnp.where(success, 30.0, 0.0)
-            - jnp.where(collision, 10.0, 0.0)
             - jnp.where(out_of_bounds, 3.0, 0.0)
         )
 
         step = state["step"] + 1
-        done = jnp.logical_or(step >= self.config.max_steps, jnp.logical_or(success, jnp.logical_or(collision, out_of_bounds)))
+        done = jnp.logical_or(step >= self.config.max_steps, jnp.logical_or(success, out_of_bounds))
 
         new_state = {
             "data": data,
@@ -398,3 +401,107 @@ class TankNavEnv:
             "collision": collision.astype(jnp.float32),
         }
         return new_state, obs, reward, done, metrics
+
+    def step_with_trajectory(self, state: dict[str, Any], action: jnp.ndarray):
+        action = jnp.clip(action, -1.0, 1.0)
+
+        data = state["data"]
+        yaw = data.qpos[self.car_yaw_qpos]
+        heading_cmd = yaw + 0.5 * jnp.pi
+
+        left = action[0]
+        right = action[1]
+        v_l = self.config.max_track_speed * left
+        v_r = self.config.max_track_speed * right
+        v = 0.5 * (v_l + v_r)
+        omega = (v_r - v_l) / (self.config.track_separation + 1e-6)
+
+        vx_des = v * jnp.cos(heading_cmd)
+        vy_des = v * jnp.sin(heading_cmd)
+        wz_des = omega
+
+        qvel = data.qvel
+        force_scale = self.config.control_force_scale
+        fx = force_scale * self.kp_lin * (vx_des - qvel[self.car_x_qvel])
+        fy = force_scale * self.kp_lin * (vy_des - qvel[self.car_y_qvel])
+        tz = force_scale * self.kp_yaw * (wz_des - qvel[self.car_yaw_qvel])
+
+        ctrl = jnp.asarray([fx, fy, tz, 4.0 * force_scale * left, 4.0 * force_scale * right], dtype=jnp.float32)
+        ctrl = jnp.clip(ctrl, self.ctrl_min, self.ctrl_max)
+        data = data.replace(ctrl=ctrl)
+
+        total_substeps = self.config.frame_skip * self.config.action_hold_steps
+        trajectory = []
+        for _ in range(total_substeps):
+            data = mjx.step(self.model, data)
+            trajectory.append(
+                {
+                    "qpos": np.asarray(jax.device_get(data.qpos), dtype=np.float64),
+                    "qvel": np.asarray(jax.device_get(data.qvel), dtype=np.float64),
+                    "ctrl": np.asarray(jax.device_get(data.ctrl), dtype=np.float64),
+                }
+            )
+
+        car_xy = jnp.asarray([data.qpos[self.car_x_qpos], data.qpos[self.car_y_qpos]], dtype=jnp.float32)
+        yaw = data.qpos[self.car_yaw_qpos]
+        target_xy = state["target_xy"]
+
+        sensor_dists = self._sensor_distances(car_xy, yaw)
+        raw_obs = jnp.clip(sensor_dists / self.config.sensor_range, 0.0, 1.0)
+        sensor_hist = jnp.concatenate([state["sensor_hist"][1:], raw_obs[None, :]], axis=0)
+        obs = self._compose_observation(sensor_hist, car_xy, yaw, target_xy)
+
+        dist_target = jnp.linalg.norm(target_xy - car_xy)
+        progress = state["prev_dist"] - dist_target
+
+        clearances = jax.vmap(
+            lambda c, h, a: self._point_box_signed_distance(car_xy, c, h, a) - self.config.car_radius
+        )(self.wall_centers, self.wall_half_extents, self.wall_yaws)
+        min_clearance = jnp.min(clearances)
+        collision = min_clearance < 0.0
+
+        heading = yaw + 0.5 * jnp.pi
+        heading_vec = jnp.asarray([jnp.cos(heading), jnp.sin(heading)], dtype=jnp.float32)
+        goal_vec = (target_xy - car_xy) / (dist_target + 1e-6)
+        heading_align = jnp.dot(heading_vec, goal_vec)
+
+        sensor_min = jnp.min(sensor_dists)
+
+        action_cost = 0.008 * jnp.sum(jnp.square(action - state["last_action"]))
+        success = dist_target < self.config.target_success_radius
+        out_of_bounds = jnp.any(jnp.abs(car_xy) > (self.config.room_half_size + 0.10))
+
+        reward = (
+            24.0 * progress
+            + 0.60 * heading_align
+            - action_cost
+            - 0.01
+            + jnp.where(success, 30.0, 0.0)
+            - jnp.where(out_of_bounds, 3.0, 0.0)
+        )
+
+        step = state["step"] + 1
+        done = jnp.logical_or(step >= self.config.max_steps, jnp.logical_or(success, out_of_bounds))
+
+        new_state = {
+            "data": data,
+            "step": step,
+            "prev_dist": dist_target,
+            "target_xy": target_xy,
+            "success": jnp.logical_or(state["success"], success),
+            "collision": jnp.logical_or(state["collision"], collision),
+            "last_action": action,
+            "sensor_hist": sensor_hist,
+            "rng": state["rng"],
+        }
+
+        metrics = {
+            "dist_target": dist_target,
+            "progress": progress,
+            "sensor_min": sensor_min,
+            "heading_align": heading_align,
+            "min_clearance": min_clearance,
+            "success": success.astype(jnp.float32),
+            "collision": collision.astype(jnp.float32),
+        }
+        return new_state, obs, reward, done, metrics, trajectory
