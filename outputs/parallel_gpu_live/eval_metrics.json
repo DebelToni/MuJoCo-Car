@@ -1,0 +1,106 @@
+[
+  {
+    "iter": 4,
+    "eval_success_rate": 0.46875,
+    "eval_collision_rate": 0.5625,
+    "eval_distance_mean": 0.35381457302719355,
+    "eval_reward_mean": 25.651191030963673,
+    "accuracy": 0.46875
+  },
+  {
+    "iter": 8,
+    "eval_success_rate": 0.453125,
+    "eval_collision_rate": 0.609375,
+    "eval_distance_mean": 0.37477867561392486,
+    "eval_reward_mean": 23.616400383791188,
+    "accuracy": 0.453125
+  },
+  {
+    "iter": 12,
+    "eval_success_rate": 0.625,
+    "eval_collision_rate": 0.484375,
+    "eval_distance_mean": 0.25791462743654847,
+    "eval_reward_mean": 30.994393957356806,
+    "accuracy": 0.625
+  },
+  {
+    "iter": 16,
+    "eval_success_rate": 0.59375,
+    "eval_collision_rate": 0.609375,
+    "eval_distance_mean": 0.3402967118890956,
+    "eval_reward_mean": 24.667095572811377,
+    "accuracy": 0.59375
+  },
+  {
+    "iter": 20,
+    "eval_success_rate": 0.5625,
+    "eval_collision_rate": 0.546875,
+    "eval_distance_mean": 0.4079991802573204,
+    "eval_reward_mean": 20.71975656617724,
+    "accuracy": 0.5625
+  },
+  {
+    "iter": 24,
+    "eval_success_rate": 0.65625,
+    "eval_collision_rate": 0.5,
+    "eval_distance_mean": 0.28767241012246814,
+    "eval_reward_mean": 29.91177582842647,
+    "accuracy": 0.65625
+  },
+  {
+    "iter": 28,
+    "eval_success_rate": 0.546875,
+    "eval_collision_rate": 0.609375,
+    "eval_distance_mean": 0.429986131581245,
+    "eval_reward_mean": 20.987973665447498,
+    "accuracy": 0.546875
+  },
+  {
+    "iter": 32,
+    "eval_success_rate": 0.640625,
+    "eval_collision_rate": 0.6875,
+    "eval_distance_mean": 0.42074192958534695,
+    "eval_reward_mean": 25.107632523213397,
+    "accuracy": 0.640625
+  },
+  {
+    "iter": 36,
+    "eval_success_rate": 0.59375,
+    "eval_collision_rate": 0.765625,
+    "eval_distance_mean": 0.5240276756812818,
+    "eval_reward_mean": 19.965733223849384,
+    "accuracy": 0.59375
+  },
+  {
+    "iter": 40,
+    "eval_success_rate": 0.53125,
+    "eval_collision_rate": 0.734375,
+    "eval_distance_mean": 0.5213661264788243,
+    "eval_reward_mean": 17.934967279143166,
+    "accuracy": 0.53125
+  },
+  {
+    "iter": 44,
+    "eval_success_rate": 0.515625,
+    "eval_collision_rate": 0.703125,
+    "eval_distance_mean": 0.48461066104937345,
+    "eval_reward_mean": 18.95354052343464,
+    "accuracy": 0.515625
+  },
+  {
+    "iter": 48,
+    "eval_success_rate": 0.421875,
+    "eval_collision_rate": 0.78125,
+    "eval_distance_mean": 0.5593479672679678,
+    "eval_reward_mean": 14.261499763015308,
+    "accuracy": 0.421875
+  },
+  {
+    "iter": 52,
+    "eval_success_rate": 0.453125,
+    "eval_collision_rate": 0.5625,
+    "eval_distance_mean": 0.5171595516148955,
+    "eval_reward_mean": 15.244841592764715,
+    "accuracy": 0.453125
+  }
+]
